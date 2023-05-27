@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from datetime import datetime
 from typing import Callable, List, Optional
@@ -7,29 +8,14 @@ from discord.components import SelectOption
 from discord.ext import commands
 
 sys.path.append("..")
+from collections import deque
 from pathlib import Path
 
-from utils import constants, database
+from utils import constants, database, styling
 from utils.base import LEBBase
 
 
-class AssignmentsVoteButton(discord.ui.View):
-    def __init__(self, ctx: commands.Context, assignment: database.Assignment) -> None:
-        super().__init__()
-        self.ctx = ctx
-        self.assignment = assignment
-
-    @discord.ui.button(label="Approve", style=discord.ButtonStyle.green)
-    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if interaction.permissions.administrator:
-            await interaction.message.add_reaction("✅")
-            await interaction.response.send_message("Approved!", ephemeral=False)
-            database.add_assignments(self.assignment)
-            self.stop()
-        else:
-            await interaction.response.send_message("You are not an administrator!", ephemeral=True)
-
-
+# region Dependency class
 class AssigmentsSelect:
     @staticmethod
     def get_options() -> List[SelectOption]:
@@ -43,6 +29,23 @@ class AssigmentsSelect:
             for assignment in assignments
         ]
         return options
+
+
+class AssignmentApproveView(discord.ui.View):
+    def __init__(self, ctx: commands.Context, assignment: database.Assignment) -> None:
+        super().__init__(timeout=18_000)
+        self.ctx = ctx
+        self.assignment = assignment
+
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.green)
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.permissions.administrator:
+            await interaction.message.add_reaction("✅")
+            await interaction.response.send_message("Approved!", ephemeral=False)
+            database.add_assignments(self.assignment)
+            self.stop()
+        else:
+            await interaction.response.send_message("You are not an administrator!", ephemeral=True)
 
 
 class AssigmentsDeleteView(discord.ui.View):
@@ -67,28 +70,59 @@ class AssigmentsDeleteView(discord.ui.View):
         self.select_menu.callback = callback
 
 
+class AssignmentsListView(discord.ui.View):
+    def __init__(self, *, timeout: float = 300):
+        super().__init__(timeout=timeout)
+        self.assignments = database.get_list_of_assignments()
+        self.queue = deque(self.assignments)
+        self.current_page = 0
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.blurple)
+    async def previous(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.queue.rotate(-1)
+        embed, thumbnail = self.get_embed(self.queue[0])
+        await interaction.response.edit_message(embed=embed, view=self, attachments=[thumbnail])
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.blurple)
+    async def next(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        self.queue.rotate(1)
+        embed, thumbnail = self.get_embed(self.queue[0])
+        await interaction.response.edit_message(embed=embed, view=self, attachments=[thumbnail])
+
+    def get_embed(self, assignment: database.Assignment) -> discord.Embed:
+        title = assignment.name
+        description = assignment.description
+        color = styling.get_color(assignment.unique_id)
+
+        thumbnail_path = styling.get_random_image(assignment.unique_id)
+        thumbnail = discord.File(thumbnail_path, filename=Path(thumbnail_path).name)
+
+        embed = discord.Embed(title=f"Assignment: {title}", description=description, color=color)
+        embed.set_thumbnail(url=f"attachment://{thumbnail.filename}")
+        embed.add_field(name="Class id", value=f"`{assignment.id}`", inline=True)
+
+        try:
+            due = datetime.strptime(assignment.due, "%Y-%m-%d %H:%M").strftime("%d, %b %Y at %H:%m")
+        except ValueError:
+            due = assignment.due
+        embed.add_field(name="Due date", value=str(due), inline=True)
+        return embed, thumbnail
+
+
+# endregion
+
+"""
+This is the assignments cog. It contains all of the commands related to assignments.
+"""
+
+
 class Assignments(commands.Cog, LEBBase):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-
-    def assignments_to_embed(self, assignments: list[database.Assignment]) -> discord.Embed:
-        # Create the embed.
-        embed = discord.Embed(
-            title="List of assignments",
-            description=f"Here is a list of assignments!",
-            color=discord.Color.red(),
-        )
-
-        # Add the fields to the embed.
-        for assignment in assignments:
-            embed.add_field(
-                name=assignment.name,
-                value=f"ID: {assignment.id}\nDue: {assignment.due}\nDescription: {assignment.description}",
-                inline=False,
-            )
-
-        # Return the embed.
-        return embed
 
     @LEBBase.parent_command.group(name="assignments")
     async def assignments(self, ctx: commands.Context) -> None:
@@ -101,8 +135,9 @@ class Assignments(commands.Cog, LEBBase):
         if not len(assignments):
             await ctx.send("There are no assignments!")
         else:
-            embed = self.assignments_to_embed(assignments)
-            await ctx.send(embed=embed)
+            list_view = AssignmentsListView()
+            embed, thumbnail = list_view.get_embed(list_view.queue[0])
+            await ctx.send(embed=embed, file=thumbnail, view=list_view)
 
     @assignments.command(name="add")
     async def assigments_add(
@@ -115,7 +150,7 @@ class Assignments(commands.Cog, LEBBase):
     ) -> None:
         if not len(due):
             # The due date was not provided, we will set it to next week.
-            due = (datetime.now() + datetime.timedelta(weeks=1)).strftime("%Y-%m-%d")
+            due = datetime.now() + datetime.timedelta(weeks=1)
 
         # Create the assignment object.
         assignments = database.get_list_of_assignments()
@@ -132,7 +167,7 @@ class Assignments(commands.Cog, LEBBase):
             thumbnail = discord.File(thumbnail_path, filename=Path(thumbnail_path).name)
 
             # Vote buttons.
-            view = AssignmentsVoteButton(ctx=ctx, assignment=assignment)
+            view = AssignmentApproveView(ctx=ctx, assignment=assignment)
 
             # Create the embed.
             embed = discord.Embed(
@@ -147,6 +182,13 @@ class Assignments(commands.Cog, LEBBase):
             embed.add_field(name="ID", value=id, inline=True)
             await ctx.send(embed=embed, file=thumbnail, view=view, ephemeral=False)
 
+        try:
+            datetime.strptime(assignment.due, "%Y-%m-%d %H:%M")
+        except ValueError:
+            await ctx.send("Invalid date format, please use YYYY-MM-DD HH:MM")
+
+        await self.reminder(assignment, datetime.strptime(assignment.due, "%Y-%m-%d %H:%M"), ctx.channel)
+
     @assignments.command(name="del")
     async def assigments_delete(self, ctx: commands.Context) -> None:
         # Delete an assignment.
@@ -154,6 +196,24 @@ class Assignments(commands.Cog, LEBBase):
 
         # Display the selected item.
         await ctx.send("select an assignment to delete", view=delete_view)
+
+    async def reminder(self, assignment: database.Assignment, due: datetime, channel: discord.TextChannel):
+        now = datetime.now()
+        wait_time = (due - now).total_seconds() - 60
+        if wait_time < 0:
+            return
+
+        await asyncio.sleep(wait_time)
+
+        embed = discord.Embed(
+            title=f"Assignment Reminder: {assignment.name}",
+            description=assignment.description,
+            color=discord.Color.red(),
+        )
+
+        embed.add_field(name="ID", value=f"`{assignment.id}`", inline=True)
+
+        await channel.send(f"Assignment due in 1 minute! {channel.mention}", embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:
