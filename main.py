@@ -6,7 +6,7 @@ import discord
 import fire
 from discord.ext import commands
 
-from utils import constants
+from utils import constants, database
 
 
 class Client(commands.Bot):
@@ -26,10 +26,15 @@ class Client(commands.Bot):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("Slash CMDs Synced", len(synced), "commands")
 
-    def start_locally(self, TOKEN: Optional[str] = None):
+    def start_locally(self, TOKEN: Optional[str] = None, clean_data: bool = False):
         """
         Starts the bot
         """
+        # Initialize the database.
+        # This will remove the data directory if it exists, and create a new one.
+        if clean_data:
+            database.initialize_database()
+
         if TOKEN is None and os.getenv(constants.TOKEN_NAME) is None:
             # If no token is provided, and no token is found in the environment variables.
             # We will use the token from the config.json file.
@@ -45,7 +50,6 @@ class Client(commands.Bot):
             TOKEN
         ), f"No token provided. Please provide a token in the config.json file or in the environment variable named {constants.TOKEN_NAME}."
         self.run(TOKEN)
-
 
 if __name__ == "__main__":
     fire.Fire(Client)
