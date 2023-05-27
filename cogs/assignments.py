@@ -109,7 +109,11 @@ class AssignmentsListView(discord.ui.View):
             due = datetime.strptime(assignment.due, "%Y-%m-%d %H:%M").strftime("%d, %b %Y at %H:%m")
         except ValueError:
             due = assignment.due
+
         embed.add_field(name="Due date", value=str(due), inline=True)
+
+        remain = datetime.strptime(assignment.due, "%Y-%m-%d %H:%M") - datetime.now()
+        embed.add_field(name="Status", value=f"{remain.days} remaining", inline=True)
         return embed, thumbnail
 
 
@@ -150,7 +154,7 @@ class Assignments(commands.Cog, LEBBase):
     ) -> None:
         if not len(due):
             # The due date was not provided, we will set it to next week.
-            due = datetime.now() + datetime.timedelta(weeks=1)
+            due = datetime.now()
 
         # Create the assignment object.
         assignments = database.get_list_of_assignments()
@@ -213,7 +217,10 @@ class Assignments(commands.Cog, LEBBase):
 
         embed.add_field(name="ID", value=f"`{assignment.id}`", inline=True)
 
-        await channel.send(f"Assignment due in 1 minute! {channel.mention}", embed=embed)
+        await channel.send(
+            f"## Deadline Reminder \n⚠️ Hey {channel.mention}, just wanted to remind you that the deadline for `{assignment.id}` is coming up soon. Please let me know if you need any help or have any questions. \n",
+            embed=embed,
+        )
 
 
 async def setup(bot: commands.Bot) -> None:
