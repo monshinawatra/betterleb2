@@ -8,7 +8,6 @@ git clone https://github.com/monshinawatra/betterleb2.git
 cd betterleb2
 pip install -r requirements.txt
 ```
-
 ## Usage
 Goto [Discord Developer Portal](https://discord.com/developers/applications) and create a new application. Then, create a bot and copy the token. Edit the `config.py` file and paste the token in the `TOKEN` variable. Then, run the `main.py` file.
 ```bash
@@ -39,8 +38,9 @@ Finally betterLeb2 bot will mention the channel when the deadline is upcoming.
 | `/leb assignments add <id> <name> <due> <desc>` | Add assignment to database `<due>` should be in YY-MM-DD HH:MM format
 | `/leb assignments list` | Show all available assignments
 | `/leb assignments del` | Display a drop down menu for delete available assignments
-________
 
+## Structure
+![Structure](images/readme/7.jpg)
 <br>
 
 ## Future plans
