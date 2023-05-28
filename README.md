@@ -14,9 +14,25 @@ Goto [Discord Developer Portal](https://discord.com/developers/applications) and
 ```bash
 python main.py start_locally
 ```
-`--clean_data` for reset the database
-<br>
-<br>
+`--clean_data` for reset the database 
+
+You can see the list of commands by typing `/leb` in the discord chat. The bot will display all available commands.
+<br><br>
+![screenshot](images/readme/1.png)
+<br><br>
+![screenshot](images/readme/2.png)
+![screenshot](images/readme/3.png)
+<br>You can see the list of all assignments by `/leb assignments list` 
+
+![screenshot](images/readme/4.png)
+
+and simply delete the assignmet by `/leb assignments del` and the drop down menu will appear.
+
+![screenshot](images/readme/5.png)
+
+Finally betterLeb2 bot will mention the channel when the deadline is upcoming.
+![screenshot](images/readme/6.png)
+
 ## Commands
 | Command | Description |
 | --- | --- |
